@@ -5,6 +5,21 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 // import { FontLoader } from 'three/addons/loaders/FontLoader.js';
 // import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
 
+
+const models = {
+	0: 'retro_cartoon_car2.glb',
+	3: 'lowpoly_ramen_bowl2.glb',
+	4: 'choco_bunny2.glb',
+	6: 'cut_fish2.glb',
+	7: 'RobotExpressive.glb',
+	// 7: 'shiba2.glb',
+	8: 'laptop.glb',
+	11: 'low-poly_truck_car_drifter2.glb',
+
+	// 7: 'gru_gru.glb',
+	// 3: 'lowpoly_fox.glb',
+};
+
 // webcam connection using WebRTC
 window.onload = function () {
 	const video = document.getElementById("myvideo");
@@ -14,26 +29,12 @@ window.onload = function () {
 		.then((stream) => video.srcObject = stream)
 		.catch((err) => {
 			alert(err.name + ": " + err.message);
-			video.src = "marker.webm";
+			// video.src = "marker.webm";
 		});
 }
 
 const clock = new THREE.Clock();
 let containers = {};
-
-const models = {
-	// 0: 'retro_cartoon_car.glb',
-	0: 'retro_cartoon_car2.glb',
-	7: 'RobotExpressive.glb',
-	8: 'laptop.glb',
-	4: 'choco_bunny2.glb',
-	// 7: 'gru_gru.glb',
-	6: 'cut_fish2.glb',
-	11: 'low-poly_truck_car_drifter2.glb',
-	// 3: 'lowpoly_fox.glb',
-	3: 'lowpoly_ramen_bowl2.glb',
-	7: 'shiba2.glb',
-};
 let unloadable_models = {};
 
 const loader = new GLTFLoader();
@@ -90,12 +91,12 @@ const get_container = async (id) => {
 	let k = { container: container, lastdetectiontime: performance.now(), first_detection: true };
 
 	const animations = model.animations;
-	if(animations.length > 0) {
+	if (animations.length > 0) {
 		// debugger
-		animations.forEach( a => console.log('Animation: ', a.name));
+		animations.forEach(a => console.log('Animation: ', a.name));
 		const clip = animations[0];
 		let mixer = new THREE.AnimationMixer(model.scene);
-		const action = mixer.clipAction( clip );
+		const action = mixer.clipAction(clip);
 		action.play();
 		// activateAction( action );		
 		k.mixer = mixer;
@@ -116,18 +117,51 @@ function fixMatrix(three_mat, m) {
 	);
 }
 
+let arController = null;
+let video = null;
+let camera = null;
+let scene = null;
+let renderer = null;
+
+// render loop
+function renderloop() {
+
+	if(!arController || !renderer || !video || !scene)
+		return;
+
+	arController.process(video);
+
+	const clock_delta = clock.getDelta();
+	const now = performance.now();
+
+	let ixs = Object.keys(containers);
+	for (let i = 0; i < ixs.length; i++) {
+		const k = ixs[i];
+		let c = containers[k];
+		if (now - c.lastdetectiontime < 100) {
+			c.container.visible = true;
+			if (c.mixer)
+				c.mixer.update(clock_delta);
+		}
+		else
+			c.container.visible = false;
+	}
+
+	renderer.render(scene, camera);
+}
+
 function start_processing() {
 	// canvas & video
-	const video = document.getElementById("myvideo");
+	video = document.getElementById("myvideo");
 	const canvas = document.getElementById("mycanvas");
 	canvas.width = video.videoWidth;
 	canvas.height = video.videoHeight;
 	video.width = video.height = 0;
 
 	// three.js
-	const renderer = new THREE.WebGLRenderer({ canvas: canvas });
-	const scene = new THREE.Scene();
-	const camera = new THREE.Camera();
+	renderer = new THREE.WebGLRenderer({ canvas: canvas });
+	scene = new THREE.Scene();
+	camera = new THREE.Camera();
 	scene.add(camera);
 
 	// background
@@ -135,14 +169,10 @@ function start_processing() {
 	bgtexture.colorSpace = THREE.SRGBColorSpace;
 	scene.background = bgtexture;
 
-	// container + object
-
 	// jsartoolkit
-	let arLoaded = false;
-	let lastdetectiontime = 0;
-	const arController = new ARController(video, 'camera_para.dat');
+	arController = new ARController(video, 'camera_para.dat');
 	arController.onload = () => {
-		// debugger
+		console.log('arController loaded');
 		camera.projectionMatrix.fromArray(arController.getCameraMatrix());
 		arController.setPatternDetectionMode(artoolkit.AR_MATRIX_CODE_DETECTION);
 		// arController.setMatrixCodeType(artoolkit.AR_MATRIX_CODE_3x3);
@@ -154,38 +184,12 @@ function start_processing() {
 					fixMatrix(c.container.matrix, ev.data.matrixGL_RH);
 					if (c.first_detection)
 						scene.add(c.container);
-
 				})
 			}
 		});
-		arLoaded = true;
-	}
 
-	// render loop
-	function renderloop() {
-		// requestAnimationFrame(renderloop);
-		if (arLoaded)
-			arController.process(video);
-		const now = performance.now();
-		let ixs = Object.keys(containers);
-		// debugger
-		const clock_delta = clock.getDelta();
-		for (let i = 0; i < ixs.length; i++) {
-			const k = ixs[i];
-			let c = containers[k];
-			if (now - c.lastdetectiontime < 100) {
-				c.container.visible = true;
-				if( c.mixer )
-					c.mixer.update( clock_delta );
-			}
-			else
-				c.container.visible = false;
-		}
-		// if(performance.now()-lastdetectiontime < 100)
-		renderer.render(scene, camera);
+		renderer.setAnimationLoop(renderloop);
 	}
 	
-	// renderloop();
-	renderer.setAnimationLoop( renderloop );
 }
 
