@@ -7,29 +7,37 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 
 const models = {
-	0: 'retro_cartoon_car2.glb',
-	3: 'lowpoly_ramen_bowl2.glb',
-	4: 'choco_bunny2.glb',
-	6: 'cut_fish2.glb',
-	7: 'RobotExpressive.glb',
+	2: 'TOM_B.glb',
+	// 2: 'retro_cartoon_car2.glb',
+	// 3: 'lowpoly_ramen_bowl2.glb',
+	// 4: 'choco_bunny2.glb',
+	// 6: 'cut_fish2.glb',
+	// 8: 'RobotExpressive.glb',
 	// 7: 'shiba2.glb',
-	8: 'laptop.glb',
-	11: 'low-poly_truck_car_drifter2.glb',
+	// 7: 'laptop.glb',
+	// 11: 'low-poly_truck_car_drifter2.glb',
 
 	// 7: 'gru_gru.glb',
 	// 3: 'lowpoly_fox.glb',
 };
 
+let arController = null;
+let canvas = null;
+let video = null;
+let camera = null;
+let scene = null;
+let renderer = null;
+let arLoaded = false;
+
 // webcam connection using WebRTC
 window.onload = function () {
-	const video = document.getElementById("myvideo");
+	video = document.getElementById("myvideo");
 	video.onloadedmetadata = start_processing;
-	const constraints = { audio: false, video: true };
+	const constraints = { audio: false, video: { facingMode: 'environment' } };
 	navigator.mediaDevices.getUserMedia(constraints)
 		.then((stream) => video.srcObject = stream)
 		.catch((err) => {
 			alert(err.name + ": " + err.message);
-			// video.src = "marker.webm";
 		});
 }
 
@@ -117,19 +125,27 @@ function fixMatrix(three_mat, m) {
 	);
 }
 
-let arController = null;
-let video = null;
-let camera = null;
-let scene = null;
-let renderer = null;
 
 // render loop
 function renderloop() {
 
-	if(!arController || !renderer || !video || !scene)
+	if(!arController || !renderer || !video || !scene || !camera )
 		return;
 
-	arController.process(video);
+	if (arLoaded)
+		arController.process(video);	
+
+	const width = canvas.clientWidth;
+	const height = canvas.clientHeight;
+	const needResize = canvas.width !== width || canvas.height !== height;
+
+	if (needResize) {
+		renderer.setSize(width, height, false);
+		camera.aspect = canvas.clientWidth / canvas.clientHeight;
+		if(camera.updateProjectionMatrix)
+			camera.updateProjectionMatrix();
+	}
+
 
 	const clock_delta = clock.getDelta();
 	const now = performance.now();
@@ -151,11 +167,30 @@ function renderloop() {
 }
 
 function start_processing() {
+
+	arLoaded = false;
+
 	// canvas & video
-	video = document.getElementById("myvideo");
-	const canvas = document.getElementById("mycanvas");
-	canvas.width = video.videoWidth;
-	canvas.height = video.videoHeight;
+	canvas = document.getElementById("mycanvas");
+	if(!canvas) {
+		console.error('Cannot find canvas element!');
+		return;
+	}
+
+	const app = document.body;
+
+	// canvas.width = video.videoWidth;
+	// canvas.height = video.videoHeight;
+
+	if (app.clientHeight > app.clientWidth) {
+		canvas.style.width = '100%';
+		canvas.style.height = `min(100%, 100vw * ${video.videoHeight} / ${video.videoWidth})`;
+	}
+	else {
+		canvas.style.height = '100%';
+		canvas.style.width = `min(100%, 100vh * ${video.videoWidth} / ${video.videoHeight})`;
+	}
+
 	video.width = video.height = 0;
 
 	// three.js
@@ -187,6 +222,7 @@ function start_processing() {
 				})
 			}
 		});
+		arLoaded = true;
 
 		renderer.setAnimationLoop(renderloop);
 	}
